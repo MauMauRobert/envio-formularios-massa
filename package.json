@@ -1,0 +1,16 @@
+{
+  "name": "envio-formularios-massa",
+  "version": "1.0.0",
+  "description": "Envio em massa de formulários com assinatura por e-mail",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "fontkit": "^2.0.4",
+    "image-size": "^2.1.0",
+    "nodemailer": "^10.3.1",
+    "pdfkit": "^0.20.2"
+  }
+}

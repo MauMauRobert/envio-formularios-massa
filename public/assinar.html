@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assinar formulário</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topo">
+  <div id="tituloWrap" style="display:flex;align-items:center;gap:12px;width:100%">
+    <img id="logo" class="oculto" alt="" style="height:44px">
+    <div id="tituloTexto" style="flex:1">
+      <h1 id="titulo">Formulário para assinatura</h1>
+      <p>Confira os dados e assine abaixo</p>
+    </div>
+  </div>
+</header>
+
+<main class="conteudo">
+  <div id="alerta" class="alerta oculto"></div>
+
+  <section class="cartao" id="cartaoForm">
+    <img id="banner" class="banner oculto" alt="">
+    <p class="descricao-campanha" id="descricao"></p>
+    <div class="linha">
+      <div class="campo"><label>Nome do cliente</label><input id="nome" class="somente-leitura" readonly></div>
+      <div class="campo"><label>E-mail</label><input id="email" class="somente-leitura" readonly></div>
+    </div>
+    <div class="campo">
+      <label for="assinatura">Assinatura (digite seu nome completo)</label>
+      <input id="assinatura" autocomplete="off" placeholder="Seu nome completo">
+      <div class="assinatura-preview" id="previaAssinatura"></div>
+    </div>
+    <button class="primario" id="btnAssinar">Assinar e enviar</button>
+  </section>
+
+  <section class="cartao oculto" id="cartaoOk">
+    <h2>Formulário assinado com sucesso</h2>
+    <p class="dica" id="resumoOk"></p>
+    <p>Uma cópia foi enviada para o seu e-mail. Obrigado!</p>
+  </section>
+</main>
+
+<script src="/assinar.js"></script>
+</body>
+</html>

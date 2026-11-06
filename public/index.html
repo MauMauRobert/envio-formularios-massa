@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Envio de formulários em massa</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topo">
+  <div>
+    <h1>Envio de formulários em massa</h1>
+    <p>Campanhas, planilha de contatos e assinaturas</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div id="smtpStatus"><span class="etiqueta aviso">verificando SMTP…</span></div>
+    <div id="areaUsuario" style="display:flex;gap:8px;align-items:center">
+      <span id="usuarioLogado" style="font-size:13px"></span>
+      <button class="secundario" id="btnSair" style="padding:6px 12px">Sair</button>
+    </div>
+  </div>
+</header>
+
+<main class="conteudo">
+  <div id="alerta" class="alerta oculto"></div>
+
+  <!-- VISÃO GERAL -->
+  <div id="visaoGeral">
+    <section class="cartao">
+      <h2>Configuração de envio (SMTP)</h2>
+      <p class="dica">Sem SMTP configurado, o sistema roda em modo teste e os e-mails ficam registrados no log.</p>
+      <div class="linha">
+        <div class="campo"><label for="smtp_host">Servidor SMTP</label><input id="smtp_host" placeholder="smtp.exemplo.com"></div>
+        <div class="campo" style="flex:0 1 110px"><label for="smtp_port">Porta</label><input id="smtp_port" value="587"></div>
+      </div>
+      <div class="linha">
+        <div class="campo"><label for="smtp_user">Usuário</label><input id="smtp_user" autocomplete="username"></div>
+        <div class="campo"><label for="smtp_pass">Senha</label><input id="smtp_pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+      </div>
+      <div class="linha">
+        <div class="campo"><label for="smtp_from">Remetente (nome ou e-mail)</label><input id="smtp_from" placeholder="formularios@suaempresa.com"></div>
+        <div class="campo"><label for="base_url">Endereço público da ferramenta</label><input id="base_url" placeholder="https://formularios.suaempresa.com"></div>
+      </div>
+      <div class="acao-linha">
+        <button class="primario" id="btnSalvarSmtp">Salvar configuração</button>
+        <input id="testePara" placeholder="testar envio para…" style="padding:9px 11px;font-size:14px;border:1px solid #d6d3d1;border-radius:6px;min-width:220px">
+        <button class="secundario" id="btnTestarSmtp">Enviar teste</button>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2>Usuários</h2>
+      <p class="dica">Quem pode entrar no painel. O link de assinatura do cliente continua público.</p>
+      <div class="rolagem"><table>
+        <thead><tr><th>Usuário</th><th>Criado em</th></tr></thead>
+        <tbody id="tabelaUsuarios"><tr><td colspan="2">Carregando…</td></tr></tbody>
+      </table></div>
+      <div class="linha" style="margin-top:10px">
+        <div class="campo"><label for="novoUsuario">Novo usuário</label><input id="novoUsuario" placeholder="nome.sobrenome" autocomplete="off"></div>
+        <div class="campo"><label for="novaSenha">Senha (mín. 8 caracteres)</label><input id="novaSenha" type="password" autocomplete="new-password"></div>
+      </div>
+      <button class="primario" id="btnCriarUsuario">Criar usuário</button>
+    </section>
+
+    <section class="cartao">
+      <h2>Nova campanha</h2>
+      <p class="dica">A descrição aparece no formulário que o cliente recebe. Aceita variáveis <b>{{COLUNA}}</b> e bloco <b>{{#linhas}}…{{/linhas}}</b> com os dados da planilha.</p>
+      <div class="linha">
+        <div class="campo"><label for="campTitulo">Título da campanha</label><input id="campTitulo" placeholder="Ex.: Autorização de uso de imagem 2026"></div>
+        <div class="campo"><label for="campRetorno">E-mail que recebe a cópia assinada</label><input id="campRetorno" placeholder="voce@suaempresa.com"></div>
+      </div>
+      <div class="campo"><label for="campDescricao">Descrição da campanha</label><textarea id="campDescricao" placeholder="Texto exibido no topo do formulário do cliente…"></textarea></div>
+      <div class="campo"><label for="campMsgCliente">Mensagem do cliente (opcional)</label><textarea id="campMsgCliente" placeholder="Texto que o cliente vê no link dele — diferente da mensagem do vendedor…"></textarea></div>
+      <div class="campo"><label for="campPdfCliente">Texto do PDF do cliente (opcional)</label><textarea id="campPdfCliente" placeholder="Texto que vai em cada PDF do cliente — vazio usa a mensagem acima…"></textarea></div>
+      <div class="campo"><label for="campImagem">Imagem acima da descrição (opcional, PNG/JPG até 2 MB)</label><input type="file" id="campImagem" accept=".png,.jpg,.jpeg"></div>
+      <div class="linha">
+        <div class="campo"><label for="campLogo">Logotipo ao lado do título (opcional)</label><input type="file" id="campLogo" accept=".png,.jpg,.jpeg"></div>
+        <div class="campo"><label for="campAlinhamento">Alinhamento do título</label><select id="campAlinhamento"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
+        <div class="campo"><label for="campLogoPos">Posição do logotipo</label><select id="campLogoPos"><option value="antes">Antes do texto</option><option value="depois">Depois do texto</option></select></div>
+      </div>
+      <div class="linha">
+        <div class="campo"><label for="campImagemPos">Posição da imagem</label><select id="campImagemPos"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
+      </div>
+      <button class="primario" id="btnCriarCampanha">Criar campanha</button>
+    </section>
+
+    <section class="cartao">
+      <h2>Campanhas</h2>
+      <p class="dica">Clique em abrir para importar a planilha e disparar.</p>
+      <div class="rolagem"><table>
+        <thead><tr><th>Título</th><th>Contatos</th><th>Enviados</th><th>Assinados</th><th></th></tr></thead>
+        <tbody id="tabelaCampanhas"><tr><td colspan="5">Carregando…</td></tr></tbody>
+      </table></div>
+    </section>
+
+    <section class="cartao">
+      <h2>Últimos e-mails (log)</h2>
+      <p class="dica">Em modo teste, os e-mails aparecem aqui em vez de serem enviados.</p>
+      <div class="rolagem"><table>
+        <thead><tr><th>Quando</th><th>Para</th><th>Assunto</th><th>Tipo</th><th>Enviado?</th></tr></thead>
+        <tbody id="tabelaLog"><tr><td colspan="5">Carregando…</td></tr></tbody>
+      </table></div>
+    </section>
+  </div>
+
+  <!-- DETALHE DA CAMPANHA -->
+  <div id="visaoCampanha" class="oculto">
+    <button class="secundario voltar" id="btnVoltar">← Voltar para campanhas</button>
+    <section class="cartao">
+      <div id="detTituloWrap" style="display:flex;align-items:center;gap:12px">
+        <img id="detLogo" class="oculto" alt="" style="height:40px">
+        <h2 id="detTitulo" style="margin:0"></h2>
+      </div>
+      <p class="dica" id="detResumo"></p>
+      <img id="detBanner" class="banner oculto" alt="">
+      <p class="descricao-campanha" id="detDescricao"></p>
+    </section>
+
+    <section class="cartao">
+      <h2>Editar campanha</h2>
+      <p class="dica">As alterações valem para os próximos envios e reenvios.</p>
+      <div class="linha">
+        <div class="campo"><label for="editTitulo">Título da campanha</label><input id="editTitulo"></div>
+        <div class="campo"><label for="editRetorno">E-mail que recebe a cópia assinada</label><input id="editRetorno"></div>
+      </div>
+      <div class="campo"><label for="editDescricao">Descrição da campanha</label><textarea id="editDescricao"></textarea></div>
+      <div class="campo"><label for="editImagem">Trocar imagem (PNG/JPG até 2 MB)</label><input type="file" id="editImagem" accept=".png,.jpg,.jpeg"></div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="editRemoverImagem"> remover imagem atual</label></div>
+      <div class="linha">
+        <div class="campo"><label for="editLogo">Trocar logotipo</label><input type="file" id="editLogo" accept=".png,.jpg,.jpeg"></div>
+        <div class="campo"><label for="editAlinhamento">Alinhamento do título</label><select id="editAlinhamento"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
+        <div class="campo"><label for="editLogoPos">Posição do logotipo</label><select id="editLogoPos"><option value="antes">Antes do texto</option><option value="depois">Depois do texto</option></select></div>
+      </div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="editRemoverLogo"> remover logotipo atual</label></div>
+      <div class="linha">
+        <div class="campo"><label for="editImagemPos">Posição da imagem</label><select id="editImagemPos"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
+      </div>
+      <button class="primario" id="btnSalvarCampanha">Salvar alterações</button>
+    </section>
+
+    <section class="cartao">
+      <h2>Mensagem do cliente</h2>
+      <p class="dica">Textos que o <b>cliente</b> vê — diferentes da mensagem do vendedor. Aceitam <b>{{COLUNA}}</b> da linha do cliente, <b>{{NOME}}</b>, <b>{{EMAIL}}</b> e <b>{{link}}</b> (o próprio link dele). Vazio, o PDF usa a mensagem do cliente; ambas vazias, vale a descrição principal.</p>
+      <div class="campo"><label for="msgCliente">Mensagem do cliente (no link de assinatura)</label><textarea id="msgCliente"></textarea></div>
+      <div class="campo"><label for="msgPdf">Texto do PDF do cliente</label><textarea id="msgPdf"></textarea></div>
+      <button class="primario" id="btnSalvarMsgCliente">Salvar textos do cliente</button>
+    </section>
+
+    <section class="cartao">
+      <h2>1. Importar planilha</h2>
+      <p class="dica">CSV com qualquer coluna. No Excel: Arquivo → Salvar como → CSV. Use <b>{{COLUNA}}</b> na descrição para variáveis e <b>{{#linhas}}…{{/linhas}}</b> para repetir por linha do grupo.</p>
+      <div class="acao-linha">
+        <input type="file" id="arquivoCsv" accept=".csv,.txt">
+        <label style="font-size:14px"><input type="checkbox" id="temCabecalho" checked> primeira linha é cabeçalho</label>
+      </div>
+      <div class="linha" id="mapeamento" style="margin-top:12px">
+        <div class="campo"><label for="mapNome">Coluna do nome</label><select id="mapNome"></select></div>
+        <div class="campo"><label for="mapEmail">E-mail do cliente (opcional)</label><select id="mapEmail"></select></div>
+        <div class="campo"><label for="mapGrupo">Agrupar por (opcional)</label><select id="mapGrupo"></select></div>
+      </div>
+      <div class="linha" id="mapeamento2" style="margin-top:4px">
+        <div class="campo"><label for="mapEmailCc">E-mail cópia — vendedor</label><select id="mapEmailCc"></select></div>
+        <div class="campo"><label for="mapNomeLinha">Nome do cliente nas linhas</label><select id="mapNomeLinha"></select></div>
+      </div>
+      <div class="acao-linha">
+        <button class="primario" id="btnImportar">Importar contatos</button>
+      </div>
+      <p class="dica" id="previaCsv" style="margin-top:10px"></p>
+    </section>
+
+    <section class="cartao">
+      <h2>2. Disparar convites</h2>
+      <p class="dica">Envia um link individual de assinatura para cada contato pendente.</p>
+      <div class="acao-linha">
+        <button class="primario" id="btnDisparar">Disparar agora</button>
+        <button class="secundario" id="btnReenviarTodos">Reenviar para todos não assinados</button>
+        <span id="statusDisparo" class="dica"></span>
+      </div>
+    </section>
+
+    <section class="cartao">
+      <h2>3. Contatos e assinaturas</h2>
+      <div class="acao-linha" style="margin-bottom:10px">
+        <button class="secundario" id="btnApagarContatos">Apagar contatos e assinaturas</button>
+      </div>
+      <div class="rolagem"><table>
+        <thead><tr><th>Nome</th><th>E-mail</th><th>Status</th><th>Enviado em</th><th>Assinado em</th><th>Assinatura</th><th>Linhas</th><th>Ações</th></tr></thead>
+        <tbody id="tabelaContatos"></tbody>
+      </table></div>
+    </section>
+  </div>
+  <div id="modalPrevia" class="oculto" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50">
+    <div class="cartao" style="max-width:640px;width:100%;max-height:85vh;overflow:auto;margin:0">
+      <h2 id="previaTitulo">Prévia do e-mail</h2>
+      <p class="dica" id="previaPara"></p>
+      <div id="previaCorpo" style="border:1px solid var(--borda);border-radius:6px;padding:14px"></div>
+      <div class="acao-linha"><button class="secundario" id="btnFecharPrevia">Fechar</button></div>
+    </div>
+  </div>
+  <div id="modalLinhas" class="oculto" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50">
+    <div class="cartao" style="max-width:700px;width:100%;max-height:85vh;overflow:auto;margin:0">
+      <h2 id="linhasTitulo">Clientes</h2>
+      <p class="dica" id="linhasResumo"></p>
+      <div class="rolagem"><table>
+        <thead><tr><th>Cliente</th><th>Status</th><th>Assinado em</th><th>Link</th></tr></thead>
+        <tbody id="tabelaLinhas"></tbody>
+      </table></div>
+      <div class="acao-linha"><button class="secundario" id="btnFecharLinhas">Fechar</button></div>
+    </div>
+  </div>
+</main>
+
+<script type="module" src="/admin.js"></script>
+</body>
+</html>
