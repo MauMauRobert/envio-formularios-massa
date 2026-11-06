@@ -1,8 +1,7 @@
 services:
   app:
+    image: ${APP_IMAGE:-envio-formularios:latest}
     build: .
-    expose:
-      - "3000"
     environment:
       HOST: 0.0.0.0
       PORT: "3000"
@@ -10,17 +9,23 @@ services:
     volumes:
       - app-data:/app/data
     restart: unless-stopped
+    deploy:
+      restart_policy:
+        condition: on-failure
   caddy:
     image: caddy:2-alpine
+    command: reverse-proxy --from ${DOMINIO} --to app:3000
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
     depends_on:
       - app
     restart: unless-stopped
+    deploy:
+      restart_policy:
+        condition: on-failure
 volumes:
   app-data:
   caddy-data:

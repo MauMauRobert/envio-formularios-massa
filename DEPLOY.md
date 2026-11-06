@@ -41,7 +41,7 @@ usuário admin do Portainer e escolha **Get Started** no ambiente local.
 ## 3. Código num repositório git
 
 O Portainer monta a stack a partir do git. Suba a pasta do projeto
-(ela já contém `Dockerfile`, `docker-compose.yml` e `Caddyfile`) para
+(ela já contém `Dockerfile` e `docker-compose.yml`) para
 um repositório privado no GitHub/GitLab/etc.:
 
 ```bash
@@ -61,6 +61,8 @@ Não suba o `data/app.db` local nem o `.env` com senhas (use `.gitignore`).
 3. Em **Environment variables**, adicione:
    - `DOMINIO` = `forms.suaempresa.com`
    - `BASE_URL` = `https://forms.suaempresa.com`
+   - `APP_IMAGE` = só no Docker **Swarm** (veja o erro `no image specified`
+     em Problemas comuns); no Docker standalone deixe vazio.
 4. Clique em **Deploy the stack**. Na primeira vez o Caddy emite o
    certificado (pode levar 1–2 minutos).
 
@@ -94,3 +96,12 @@ O que importa é o `data/app.db` dentro do volume `app-data`. Opções:
   funcionam em VPS (a 25 costuma ser bloqueada — não a usamos).
 - **Esqueci a senha do admin**: via SSH, pare a stack e apague o usuário
   para refazer o setup: `docker run --rm -v <stack>_app-data:/v alpine sh -c "apk add --no-cache sqlite && sqlite3 /v/app.db \"DELETE FROM usuarios; DELETE FROM sessoes;\""` e suba de novo.
+- **`no image specified` / erro de `build` no deploy** (ambiente Swarm): o
+  Swarm não monta imagem a partir do `Dockerfile`, só puxa de um registry.
+  Numa máquina com Docker, dentro da pasta do projeto, rode
+  `docker build -t seuusuario/formularios:latest .` e
+  `docker push seuusuario/formularios:latest` (antes crie o repositório no
+  Docker Hub; se for privado, cadastre as credenciais em Portainer →
+  Registries). Depois defina na stack `APP_IMAGE=seuusuario/formularios:latest`
+  e faça o deploy de novo. A cada atualização do código, repita o build +
+  push e use **Update the stack**.
