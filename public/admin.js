@@ -102,6 +102,10 @@ $('btnCriarCampanha').onclick = async () => {
       email_retorno: $('campRetorno').value,
       descricao_cliente: $('campMsgCliente').value,
       descricao_pdf: $('campPdfCliente').value,
+      botao_vendedor: $('campBotaoVendedor').checked ? 'sim' : 'nao',
+      formato: $('campFormato').value,
+      assinatura_preenchida: $('campAssPreenchida').checked ? 'sim' : 'nao',
+      layout_pdf: $('campLayoutPdf').value, destaque: $('campDestaque').value,
       titulo_alinhamento: $('campAlinhamento').value, logo_posicao: $('campLogoPos').value,
       imagem_alinhamento: $('campImagemPos').value,
     };
@@ -155,7 +159,7 @@ async function abrirCampanha(id) {
   const mia = campanha.imagem_alinhamento === 'centro' ? '0 auto 14px' : campanha.imagem_alinhamento === 'direita' ? '0 0 14px auto' : '0 auto 14px 0';
   $('detBanner').style.margin = mia;
   $('editImagemPos').value = campanha.imagem_alinhamento || 'esquerda';
-  $('detResumo').textContent = `Cópia vai para ${campanha.email_retorno} • ${contatos.length} contato(s)`;
+  $('detResumo').textContent = `Cópia vai para ${campanha.email_retorno} • ${contatos.length} contato(s) • formato ${campanha.formato === 'html' ? 'HTML' : 'texto'}`;
   $('detDescricao').textContent = campanha.descricao || '(sem descrição)';
   $('editTitulo').value = campanha.titulo;
   $('editRetorno').value = campanha.email_retorno;
@@ -164,6 +168,11 @@ async function abrirCampanha(id) {
   $('msgPdf').value = campanha.descricao_pdf || '';
   $('editAlinhamento').value = campanha.titulo_alinhamento || 'esquerda';
   $('editLogoPos').value = campanha.logo_posicao || 'antes';
+  $('editBotaoVendedor').checked = campanha.botao_vendedor !== 'nao';
+  $('editFormato').value = campanha.formato || 'texto';
+  $('editAssPreenchida').checked = campanha.assinatura_preenchida !== 'nao';
+  $('editLayoutPdf').value = campanha.layout_pdf || 'termo';
+  $('editDestaque').value = campanha.destaque || '';
   $('editImagem').value = '';
   $('editLogo').value = '';
   $('editRemoverImagem').checked = false;
@@ -183,6 +192,10 @@ $('btnSalvarCampanha').onclick = async () => {
       email_retorno: $('editRetorno').value,
       titulo_alinhamento: $('editAlinhamento').value, logo_posicao: $('editLogoPos').value,
       imagem_alinhamento: $('editImagemPos').value,
+      botao_vendedor: $('editBotaoVendedor').checked ? 'sim' : 'nao',
+      formato: $('editFormato').value,
+      assinatura_preenchida: $('editAssPreenchida').checked ? 'sim' : 'nao',
+      layout_pdf: $('editLayoutPdf').value, destaque: $('editDestaque').value,
     };
     if ($('editRemoverImagem').checked) corpo.imagem = '';
     else if ($('editImagem').files[0]) corpo.imagem = await lerDataUrl($('editImagem').files[0]);

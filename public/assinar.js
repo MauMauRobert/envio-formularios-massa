@@ -31,7 +31,8 @@ async function init() {
   }
   $('titulo').textContent = dados.titulo;
   document.title = `Assinar — ${dados.titulo}`;
-  $('descricao').textContent = dados.descricao || '';
+  if (dados.formato === 'html') $('descricao').innerHTML = dados.descricao || '';
+  else $('descricao').textContent = dados.descricao || '';
   $('nome').value = dados.nome;
   $('email').value = dados.email;
   if (!dados.email) {
@@ -57,8 +58,20 @@ async function init() {
     mostrarOk(dados.assinatura || dados.nome, dados.assinado_em || '');
     return;
   }
-  $('assinatura').value = dados.nome;
-  $('previaAssinatura').textContent = dados.nome;
+  if (dados.pode_assinar === false) {
+    $('assinatura').closest('.campo').classList.add('oculto');
+    $('btnAssinar').classList.add('oculto');
+    alerta('A assinatura neste link está desativada para o vendedor. Os clientes assinam pelos links individuais.', 'aviso');
+    return;
+  }
+  if (dados.assinatura_preenchida === false) {
+    $('assinatura').value = '';
+    $('assinatura').placeholder = 'Digite seu nome completo para assinar';
+    $('previaAssinatura').textContent = '';
+  } else {
+    $('assinatura').value = dados.nome;
+    $('previaAssinatura').textContent = dados.nome;
+  }
 }
 
 $('assinatura').addEventListener('input', (e) => {

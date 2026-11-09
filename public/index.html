@@ -64,7 +64,7 @@
 
     <section class="cartao">
       <h2>Nova campanha</h2>
-      <p class="dica">A descrição aparece no formulário que o cliente recebe. Aceita variáveis <b>{{COLUNA}}</b> e bloco <b>{{#linhas}}…{{/linhas}}</b> com os dados da planilha.</p>
+      <p class="dica">A descrição aparece no formulário que o cliente recebe. Aceita variáveis <b>{{COLUNA}}</b> e bloco <b>{{#linhas}}…{{/linhas}}</b> com os dados da planilha. Em HTML, use tags (<b>&lt;b&gt;</b>, <b>&lt;br&gt;</b>, <b>&lt;a href="…"&gt;</b>); no PDF elas saem como texto.</p>
       <div class="linha">
         <div class="campo"><label for="campTitulo">Título da campanha</label><input id="campTitulo" placeholder="Ex.: Autorização de uso de imagem 2026"></div>
         <div class="campo"><label for="campRetorno">E-mail que recebe a cópia assinada</label><input id="campRetorno" placeholder="voce@suaempresa.com"></div>
@@ -80,6 +80,13 @@
       </div>
       <div class="linha">
         <div class="campo"><label for="campImagemPos">Posição da imagem</label><select id="campImagemPos"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
+      </div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="campBotaoVendedor" checked> exibir botão de assinar para o vendedor</label></div>
+      <div class="campo"><label for="campFormato">Formato da campanha</label><select id="campFormato"><option value="texto">Só texto</option><option value="html">HTML (e-mail estilizado)</option></select></div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="campAssPreenchida" checked> assinatura já preenchida com o nome do cliente</label></div>
+      <div class="linha">
+        <div class="campo"><label for="campLayoutPdf">Layout do PDF</label><select id="campLayoutPdf"><option value="termo">Termo de adesão</option><option value="livre">Livre (texto corrido)</option></select></div>
+        <div class="campo"><label for="campDestaque">Destaque (faixa do PDF termo)</label><input id="campDestaque" placeholder="CAMPANHA ..."></div>
       </div>
       <button class="primario" id="btnCriarCampanha">Criar campanha</button>
     </section>
@@ -132,6 +139,13 @@
         <div class="campo"><label for="editLogoPos">Posição do logotipo</label><select id="editLogoPos"><option value="antes">Antes do texto</option><option value="depois">Depois do texto</option></select></div>
       </div>
       <div class="campo"><label style="font-weight:400"><input type="checkbox" id="editRemoverLogo"> remover logotipo atual</label></div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="editBotaoVendedor" checked> exibir botão de assinar para o vendedor</label></div>
+      <div class="campo"><label for="editFormato">Formato da campanha</label><select id="editFormato"><option value="texto">Só texto</option><option value="html">HTML (e-mail estilizado)</option></select></div>
+      <div class="campo"><label style="font-weight:400"><input type="checkbox" id="editAssPreenchida" checked> assinatura já preenchida com o nome do cliente</label></div>
+      <div class="linha">
+        <div class="campo"><label for="editLayoutPdf">Layout do PDF</label><select id="editLayoutPdf"><option value="termo">Termo de adesão</option><option value="livre">Livre (texto corrido)</option></select></div>
+        <div class="campo"><label for="editDestaque">Destaque (faixa do PDF termo)</label><input id="editDestaque" placeholder="CAMPANHA ..."></div>
+      </div>
       <div class="linha">
         <div class="campo"><label for="editImagemPos">Posição da imagem</label><select id="editImagemPos"><option value="esquerda">Esquerda</option><option value="centro">Centro</option><option value="direita">Direita</option></select></div>
       </div>

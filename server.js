@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import nodemailer from 'nodemailer';
 import { fileURLToPath } from 'node:url';
 import { gerarPdf } from './pdf.js';
-import { renderTemplate, descCliente, descPdf, comLinkProprio } from './template.js';
+import { renderTemplate, renderTemplateHtml, descCliente, descPdf, comLinkProprio, sanitizarHtml, tirarTags, ehDocumentoHtml, resolverCid } from './template.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +43,11 @@ CREATE TABLE IF NOT EXISTS campanhas (
   logo_posicao TEXT NOT NULL DEFAULT 'antes',
   descricao_cliente TEXT NOT NULL DEFAULT '',
   descricao_pdf TEXT NOT NULL DEFAULT '',
+  botao_vendedor TEXT NOT NULL DEFAULT 'sim',
+  formato TEXT NOT NULL DEFAULT 'texto',
+  assinatura_preenchida TEXT NOT NULL DEFAULT 'sim',
+  layout_pdf TEXT NOT NULL DEFAULT 'termo',
+  destaque TEXT NOT NULL DEFAULT '',
   criado_em TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS contatos (
@@ -127,6 +132,11 @@ for (const [tabela, col, def] of [
   ['campanhas', 'logo_posicao', "TEXT NOT NULL DEFAULT 'antes'"],
   ['campanhas', 'descricao_cliente', "TEXT NOT NULL DEFAULT ''"],
   ['campanhas', 'descricao_pdf', "TEXT NOT NULL DEFAULT ''"],
+  ['campanhas', 'botao_vendedor', "TEXT NOT NULL DEFAULT 'sim'"],
+  ['campanhas', 'formato', "TEXT NOT NULL DEFAULT 'texto'"],
+  ['campanhas', 'assinatura_preenchida', "TEXT NOT NULL DEFAULT 'sim'"],
+  ['campanhas', 'layout_pdf', "TEXT NOT NULL DEFAULT 'termo'"],
+  ['campanhas', 'destaque', "TEXT NOT NULL DEFAULT ''"],
 ]) {
   try {
     db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${col} ${def}`);
@@ -219,7 +229,10 @@ function tituloHtml(titulo, logoSrc, alinhamento, logoPos) {
   return `<table width="100%" cellpadding="0" cellspacing="0" border="0"><tr>${cells}</tr></table>`;
 }
 
-function inviteHtml(campanha, contato, link, imgs = {}) {
+function inviteHtml(campanha, contato, link, imgs = {}, mostrarBotao = true) {
+  if ((campanha.formato || 'texto') === 'html' && ehDocumentoHtml(campanha.descricao)) {
+    return resolverCid(campanha.descricao, imgs);
+  }
   const bAl = campanha.imagem_alinhamento === 'centro' ? 'center' : campanha.imagem_alinhamento === 'direita' ? 'right' : 'left';
   const banner = imgs.banner
     ? `<p align="${bAl}" style="margin:0 0 12px"><img src="${imgs.banner}" alt="" style="max-width:100%;height:auto;border-radius:6px"></p>`
@@ -227,10 +240,10 @@ function inviteHtml(campanha, contato, link, imgs = {}) {
   return `<div style="font-family:Arial,sans-serif;max-width:600px">
 ${tituloHtml(campanha.titulo, imgs.logo, campanha.titulo_alinhamento, campanha.logo_posicao)}
 <p>Olá, ${esc(contato.nome)}!</p>
-${banner}<p>${esc(campanha.descricao).replace(/\n/g, '<br>')}</p>
-<p>Para assinar, clique no botão abaixo:</p>
+${banner}${campanha.formato === 'html' ? campanha.descricao : `<p>${esc(campanha.descricao).replace(/\n/g, '<br>')}</p>`}
+${mostrarBotao ? `<p>Para assinar, clique no botão abaixo:</p>
 <p><a href="${esc(link)}" style="display:inline-block;padding:12px 24px;background:#00B894;color:#fff;text-decoration:none;border-radius:6px">Assinar formulário</a></p>
-<p style="color:#555;font-size:13px">Se o botão não funcionar, copie este link:<br>${esc(link)}</p>
+<p style="color:#555;font-size:13px">Se o botão não funcionar, copie este link:<br>${esc(link)}</p>` : ''}
 </div>`;
 }
 
@@ -243,6 +256,16 @@ function ctxDe(ct) {
     linhas = Array.isArray(l) ? l : [];
   } catch { linhas = []; }
   return { nome: ct.nome, email: ct.email, dados, linhas };
+}
+
+// Descrição pronta para e-mail/form (HTML ou texto) e para o PDF (sempre texto).
+function processarDescricao(camp, template, ctx) {
+  if ((camp.formato || 'texto') === 'html') return sanitizarHtml(renderTemplateHtml(template, ctx));
+  return renderTemplate(template, ctx);
+}
+function renderPdf(camp, template, ctx) {
+  const txt = renderTemplate(template, ctx);
+  return (camp.formato || 'texto') === 'html' ? tirarTags(txt) : txt;
 }
 
 function validarImagem(dataUrl) {
@@ -296,11 +319,11 @@ function contextoEnvio(camp, ct, base) {
     }
     return out;
   });
-  return { ctx: { ...ctxBase, linhas }, link };
+  return { ctx: { ...ctxBase, linhas }, link, nFilas: filas.length };
 }
 
 async function enviarConvite(camp, ct, base) {
-  const { ctx, link } = contextoEnvio(camp, ct, base);
+  const { ctx, link, nFilas } = contextoEnvio(camp, ct, base);
   const attachments = [];
   const imgs = { banner: null, logo: null };
   const banner = decodificarImagem(camp.imagem);
@@ -313,7 +336,7 @@ async function enviarConvite(camp, ct, base) {
     attachments.push({ filename: `logo.${logo.mime === 'image/png' ? 'png' : 'jpg'}`, content: logo.buf, contentType: logo.mime, cid: 'logo' });
     imgs.logo = 'cid:logo';
   }
-  // Um PDF por linha, para imprimir (com o link digital dentro).
+  // Um PDF por linha, para imprimir.
   for (let i = 0; i < ctx.linhas.length; i++) {
     const row = ctx.linhas[i];
     const nomeLinha = row.nome_linha || row.NOME_LINHA || ct.nome;
@@ -321,9 +344,9 @@ async function enviarConvite(camp, ct, base) {
     const ctxLinha = { nome: nomeLinha, email: emailLinha, dados: row, linhas: [row] };
     try {
       const draft = await gerarPdf(
-        { ...camp, descricao: renderTemplate(descPdf(camp), ctxLinha) },
+        { ...camp, descricao: renderPdf(camp, descPdf(camp), ctxLinha) },
         { nome: nomeLinha, email: emailLinha || '(não informado)', assinatura: '', assinado_em: '' },
-        { rascunho: true, numero: i + 1, link: row.link }
+        { rascunho: true, numero: i + 1, link: row.link, linha: row, dados: ctx.dados }
       );
       attachments.push({ filename: draft.filename, content: draft.buffer, contentType: 'application/pdf' });
     } catch (e) {
@@ -333,7 +356,7 @@ async function enviarConvite(camp, ct, base) {
   await sendMail({
     to: ct.email, tipo: 'convite',
     subject: renderTemplate(`${camp.titulo} — formulário para assinatura`, ctx),
-    html: inviteHtml({ ...camp, descricao: renderTemplate(camp.descricao, ctx) }, ct, link, imgs),
+    html: inviteHtml({ ...camp, descricao: processarDescricao(camp, camp.descricao, ctx) }, ct, link, imgs, camp.botao_vendedor !== 'nao' || nFilas === 0),
     attachments,
   });
 }
@@ -521,6 +544,14 @@ async function handleApi(req, res, url) {
     if (!ALINHAMENTOS.includes(al)) return sendJson(res, 400, { error: 'Alinhamento do título inválido.' });
     if (!LOGO_POS.includes(lp)) return sendJson(res, 400, { error: 'Posição do logotipo inválida.' });
     if (!ALINHAMENTOS.includes(ia)) return sendJson(res, 400, { error: 'Posição da imagem inválida.' });
+    const bv0 = b.botao_vendedor === undefined ? 'sim' : b.botao_vendedor;
+    if (bv0 !== 'sim' && bv0 !== 'nao') return sendJson(res, 400, { error: 'Opção do botão do vendedor inválida.' });
+    const fmt0 = b.formato === undefined ? 'texto' : b.formato;
+    if (fmt0 !== 'texto' && fmt0 !== 'html') return sendJson(res, 400, { error: 'Formato inválido (use texto ou html).' });
+    const ap0 = b.assinatura_preenchida === undefined ? 'sim' : b.assinatura_preenchida;
+    if (ap0 !== 'sim' && ap0 !== 'nao') return sendJson(res, 400, { error: 'Opção de assinatura inválida.' });
+    const lo0 = b.layout_pdf === undefined ? 'termo' : b.layout_pdf;
+    if (lo0 !== 'termo' && lo0 !== 'livre') return sendJson(res, 400, { error: 'Layout do PDF inválido (use termo ou livre).' });
     let imagem = '';
     let logo = '';
     try {
@@ -529,8 +560,8 @@ async function handleApi(req, res, url) {
     } catch (e) {
       return sendJson(res, 400, { error: e.message });
     }
-    const r = db.prepare('INSERT INTO campanhas (titulo, descricao, email_retorno, imagem, imagem_alinhamento, logo, titulo_alinhamento, logo_posicao, descricao_cliente, descricao_pdf) VALUES (?,?,?,?,?,?,?,?,?,?)')
-      .run(String(b.titulo).trim(), String(b.descricao || '').trim(), String(b.email_retorno).trim(), imagem, ia, logo, al, lp, String(b.descricao_cliente || '').trim(), String(b.descricao_pdf || '').trim());
+    const r = db.prepare('INSERT INTO campanhas (titulo, descricao, email_retorno, imagem, imagem_alinhamento, logo, titulo_alinhamento, logo_posicao, descricao_cliente, descricao_pdf, botao_vendedor, formato, assinatura_preenchida, layout_pdf, destaque) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(String(b.titulo).trim(), String(b.descricao || '').trim(), String(b.email_retorno).trim(), imagem, ia, logo, al, lp, String(b.descricao_cliente || '').trim(), String(b.descricao_pdf || '').trim(), bv0, fmt0, ap0, lo0, String(b.destaque || '').trim());
     return sendJson(res, 201, { id: Number(r.lastInsertRowid) });
   }
 
@@ -663,7 +694,7 @@ async function handleApi(req, res, url) {
       if (!ct) return sendJson(res, 404, { error: 'Contato não encontrado nesta campanha.' });
       const cfg = getConfig();
       const base = (cfg.base_url || '').replace(/\/$/, '');
-      const { ctx, link } = contextoEnvio(camp, ct, base);
+      const { ctx, link, nFilas } = contextoEnvio(camp, ct, base);
       const imgs = {
         banner: camp.imagem ? `/api/campanhas/${id}/imagem` : null,
         logo: camp.logo ? `/api/campanhas/${id}/logo` : null,
@@ -671,7 +702,7 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, {
         nome: ct.nome, email: ct.email,
         assunto: renderTemplate(`${camp.titulo} — formulário para assinatura`, ctx),
-        html: inviteHtml({ ...camp, descricao: renderTemplate(camp.descricao, ctx) }, ct, link, imgs),
+        html: inviteHtml({ ...camp, descricao: processarDescricao(camp, camp.descricao, ctx) }, ct, link, imgs, camp.botao_vendedor !== 'nao' || nFilas === 0),
         pdfs: ctx.linhas.length,
       });
     }
@@ -702,9 +733,18 @@ async function handleApi(req, res, url) {
       const ia = b.imagem_alinhamento === undefined ? camp.imagem_alinhamento : b.imagem_alinhamento;
       const dc = b.descricao_cliente === undefined ? camp.descricao_cliente : String(b.descricao_cliente || '').trim();
       const dp = b.descricao_pdf === undefined ? camp.descricao_pdf : String(b.descricao_pdf || '').trim();
+      const bv = b.botao_vendedor === undefined ? camp.botao_vendedor : b.botao_vendedor;
+      const fm = b.formato === undefined ? camp.formato : b.formato;
+      const ap = b.assinatura_preenchida === undefined ? camp.assinatura_preenchida : b.assinatura_preenchida;
+      const lo = b.layout_pdf === undefined ? camp.layout_pdf : b.layout_pdf;
+      const dt = b.destaque === undefined ? camp.destaque : String(b.destaque || '').trim();
       if (!ALINHAMENTOS.includes(al)) return sendJson(res, 400, { error: 'Alinhamento do título inválido.' });
       if (!LOGO_POS.includes(lp)) return sendJson(res, 400, { error: 'Posição do logotipo inválida.' });
       if (!ALINHAMENTOS.includes(ia)) return sendJson(res, 400, { error: 'Posição da imagem inválida.' });
+      if (bv !== 'sim' && bv !== 'nao') return sendJson(res, 400, { error: 'Opção do botão do vendedor inválida.' });
+      if (fm !== 'texto' && fm !== 'html') return sendJson(res, 400, { error: 'Formato inválido (use texto ou html).' });
+      if (ap !== 'sim' && ap !== 'nao') return sendJson(res, 400, { error: 'Opção de assinatura inválida.' });
+      if (lo !== 'termo' && lo !== 'livre') return sendJson(res, 400, { error: 'Layout do PDF inválido (use termo ou livre).' });
       let imagem = camp.imagem;
       let logo = camp.logo;
       try {
@@ -713,8 +753,8 @@ async function handleApi(req, res, url) {
       } catch (e) {
         return sendJson(res, 400, { error: e.message });
       }
-      db.prepare('UPDATE campanhas SET titulo=?, descricao=?, email_retorno=?, imagem=?, imagem_alinhamento=?, logo=?, titulo_alinhamento=?, logo_posicao=?, descricao_cliente=?, descricao_pdf=? WHERE id=?')
-        .run(String(b.titulo).trim(), String(b.descricao || '').trim(), String(b.email_retorno).trim(), imagem, ia, logo, al, lp, dc, dp, id);
+      db.prepare('UPDATE campanhas SET titulo=?, descricao=?, email_retorno=?, imagem=?, imagem_alinhamento=?, logo=?, titulo_alinhamento=?, logo_posicao=?, descricao_cliente=?, descricao_pdf=?, botao_vendedor=?, formato=?, assinatura_preenchida=?, layout_pdf=?, destaque=? WHERE id=?')
+        .run(String(b.titulo).trim(), String(b.descricao || '').trim(), String(b.email_retorno).trim(), imagem, ia, logo, al, lp, dc, dp, bv, fm, ap, lo, dt, id);
       return sendJson(res, 200, { ok: true });
     }
   }
@@ -740,7 +780,7 @@ async function handleApi(req, res, url) {
       const ln = db.prepare('SELECT * FROM links_linha WHERE token=?').get(parts[2]);
       if (!ln) return sendJson(res, 404, { error: 'Link inválido.' });
       const pc = db.prepare('SELECT campanha_id, linhas FROM contatos WHERE id=?').get(ln.contato_id);
-      const camp = db.prepare('SELECT titulo, descricao, descricao_cliente, titulo_alinhamento, logo_posicao, imagem_alinhamento, LENGTH(imagem)>0 AS tem_imagem, LENGTH(logo)>0 AS tem_logo FROM campanhas WHERE id=?').get(pc.campanha_id);
+      const camp = db.prepare('SELECT titulo, descricao, descricao_cliente, formato, assinatura_preenchida, titulo_alinhamento, logo_posicao, imagem_alinhamento, LENGTH(imagem)>0 AS tem_imagem, LENGTH(logo)>0 AS tem_logo FROM campanhas WHERE id=?').get(pc.campanha_id);
       let rows = [];
       try {
         const l = JSON.parse(pc.linhas || '[]');
@@ -749,19 +789,40 @@ async function handleApi(req, res, url) {
       const base = (getConfig().base_url || '').replace(/\/$/, '');
       const row = comLinkProprio((rows[ln.idx] && typeof rows[ln.idx] === 'object') ? rows[ln.idx] : {}, `${base}/assinar.html?token=${ln.token}`);
       const ctx = { nome: ln.nome, email: ln.email, dados: row, linhas: [row] };
+      let descricaoLn = processarDescricao(camp, descCliente(camp), ctx);
+      if ((camp.formato || 'texto') === 'html' && ehDocumentoHtml(descricaoLn)) {
+        descricaoLn = resolverCid(descricaoLn, {
+          banner: camp.tem_imagem ? `/api/campanhas/${pc.campanha_id}/imagem` : null,
+          logo: camp.tem_logo ? `/api/campanhas/${pc.campanha_id}/logo` : null,
+        });
+      }
       return sendJson(res, 200, {
-        titulo: camp.titulo, descricao: renderTemplate(descCliente(camp), ctx), nome: ln.nome, email: ln.email,
+        titulo: camp.titulo, descricao: descricaoLn, nome: ln.nome, email: ln.email,
         titulo_alinhamento: camp.titulo_alinhamento, logo_posicao: camp.logo_posicao, imagem_alinhamento: camp.imagem_alinhamento,
         tem_imagem: camp.tem_imagem, tem_logo: camp.tem_logo,
         assinado: ln.status === 'assinado', assinatura: ln.assinatura, assinado_em: ln.assinado_em,
+        formato: camp.formato || 'texto',
+        assinatura_preenchida: camp.assinatura_preenchida !== 'nao',
+        pode_assinar: true,
       });
     }
-    const camp = db.prepare('SELECT titulo, descricao, titulo_alinhamento, logo_posicao, imagem_alinhamento, LENGTH(imagem)>0 AS tem_imagem, LENGTH(logo)>0 AS tem_logo FROM campanhas WHERE id=?').get(ct.campanha_id);
+    const camp = db.prepare('SELECT titulo, descricao, botao_vendedor, formato, assinatura_preenchida, titulo_alinhamento, logo_posicao, imagem_alinhamento, LENGTH(imagem)>0 AS tem_imagem, LENGTH(logo)>0 AS tem_logo FROM campanhas WHERE id=?').get(ct.campanha_id);
+    const nFilas = db.prepare('SELECT COUNT(*) n FROM links_linha WHERE contato_id=?').get(ct.id).n;
+    let descricaoCt = processarDescricao(camp, camp.descricao, ctxDe(ct));
+    if ((camp.formato || 'texto') === 'html' && ehDocumentoHtml(descricaoCt)) {
+      descricaoCt = resolverCid(descricaoCt, {
+        banner: camp.tem_imagem ? `/api/campanhas/${ct.campanha_id}/imagem` : null,
+        logo: camp.tem_logo ? `/api/campanhas/${ct.campanha_id}/logo` : null,
+      });
+    }
     return sendJson(res, 200, {
-      titulo: camp.titulo, descricao: renderTemplate(camp.descricao, ctxDe(ct)), nome: ct.nome, email: ct.email,
+      titulo: camp.titulo, descricao: descricaoCt, nome: ct.nome, email: ct.email,
       titulo_alinhamento: camp.titulo_alinhamento, logo_posicao: camp.logo_posicao, imagem_alinhamento: camp.imagem_alinhamento,
       tem_imagem: camp.tem_imagem, tem_logo: camp.tem_logo,
       assinado: ct.status === 'assinado', assinatura: ct.assinatura, assinado_em: ct.assinado_em,
+      pode_assinar: camp.botao_vendedor !== 'nao' || nFilas === 0,
+      formato: camp.formato || 'texto',
+      assinatura_preenchida: camp.assinatura_preenchida !== 'nao',
     });
   }
 
@@ -778,7 +839,7 @@ async function handleApi(req, res, url) {
       if (!ln) return sendJson(res, 404, { error: 'Link inválido.' });
       if (ln.status === 'assinado') return sendJson(res, 200, { ok: true, already: true });
       if (assinatura.length < 2) return sendJson(res, 400, { error: 'Digite sua assinatura (seu nome).' });
-      const pc = db.prepare('SELECT campanha_id, email_copia, linhas FROM contatos WHERE id=?').get(ln.contato_id);
+      const pc = db.prepare('SELECT campanha_id, email_copia, linhas, dados FROM contatos WHERE id=?').get(ln.contato_id);
       if (!pc) return sendJson(res, 404, { error: 'Link inválido.' });
       const emailLinha = String(b.email || ln.email || '').trim();
       if (emailLinha && !isEmail(emailLinha)) return sendJson(res, 400, { error: 'E-mail inválido.' });
@@ -789,6 +850,11 @@ async function handleApi(req, res, url) {
         const l = JSON.parse(pc.linhas || '[]');
         if (Array.isArray(l)) rows = l;
       } catch { rows = []; }
+      let dadosGrupo = {};
+      try {
+        const d = JSON.parse(pc.dados || '{}');
+        if (d && typeof d === 'object') dadosGrupo = d;
+      } catch { dadosGrupo = {}; }
       const base = (getConfig().base_url || '').replace(/\/$/, '');
       const row = comLinkProprio((rows[ln.idx] && typeof rows[ln.idx] === 'object') ? rows[ln.idx] : {}, `${base}/assinar.html?token=${ln.token}`);
       const camp = db.prepare('SELECT * FROM campanhas WHERE id=?').get(pc.campanha_id);
@@ -796,7 +862,7 @@ async function handleApi(req, res, url) {
       const assunto = `Cópia assinada — ${camp.titulo} — ${ln.nome}`;
       let pdf;
       try {
-        pdf = await gerarPdf({ ...camp, descricao: renderTemplate(descPdf(camp), { nome: ln.nome, email: emailLinha, dados: row, linhas: [row] }) }, full);
+        pdf = await gerarPdf({ ...camp, descricao: renderPdf(camp, descPdf(camp), { nome: ln.nome, email: emailLinha, dados: row, linhas: [row] }) }, full, { linha: row, dados: dadosGrupo });
       } catch (e) {
         return sendJson(res, 200, { ok: true, emailError: 'Falha ao gerar o PDF: ' + e.message });
       }
@@ -816,15 +882,18 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { ok: true });
     }
     if (ct.status === 'assinado') return sendJson(res, 200, { ok: true, already: true });
+    const camp = db.prepare('SELECT * FROM campanhas WHERE id=?').get(ct.campanha_id);
+    if (camp.botao_vendedor === 'nao' && db.prepare('SELECT COUNT(*) n FROM links_linha WHERE contato_id=?').get(ct.id).n > 0) {
+      return sendJson(res, 400, { error: 'Assinatura do vendedor desativada nesta campanha.' });
+    }
     if (assinatura.length < 2) return sendJson(res, 400, { error: 'Digite sua assinatura (seu nome).' });
     db.prepare("UPDATE contatos SET status='assinado', assinatura=?, ip=?, assinado_em=datetime('now','localtime') WHERE id=?")
       .run(assinatura, ip, ct.id);
-    const camp = db.prepare('SELECT * FROM campanhas WHERE id=?').get(ct.campanha_id);
     const full = { ...ct, assinatura, assinado_em: new Date().toLocaleString('pt-BR') };
     const assunto = `Cópia assinada — ${camp.titulo} — ${ct.nome}`;
     let pdf;
     try {
-      pdf = await gerarPdf({ ...camp, descricao: renderTemplate(camp.descricao, ctxDe(ct)) }, full);
+      pdf = await gerarPdf({ ...camp, descricao: renderPdf(camp, camp.descricao, ctxDe(ct)) }, full, { linha: (ctxDe(ct).linhas[0] || {}), dados: ctxDe(ct).dados });
     } catch (e) {
       return sendJson(res, 200, { ok: true, emailError: 'Falha ao gerar o PDF: ' + e.message });
     }

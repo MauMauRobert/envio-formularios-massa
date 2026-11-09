@@ -79,7 +79,15 @@ A descrição da campanha aceita variáveis das colunas da planilha:
 - `{{COLUNA}}` — valor da coluna (da primeira linha do destinatário).
   Ex.: `{{VENDEDOR}}`, `{{RAZAOSOCIAL}}`. `{{NOME}}` e `{{EMAIL}}` sempre existem.
 - `{{#linhas}} … {{/linhas}}` — repete o trecho para cada linha do destinatário.
-  Dentro do bloco, `{{@n}}` é o número da linha (1, 2, 3…).
+  Dentro do bloco, `{{@n}}` é o número da linha (1, 2, 3…) e `{{@n0}}`
+  com zero à esquerda (01, 02…). `{{@total}}` é a quantidade de linhas.
+- `{{moeda:COLUNA}}` — valor em R$ pt-BR (aceita número americano e
+  brasileiro: `56,316.99` e `56.316,99` saem `R$ 56.316,99`).
+- `{{primeiro:COLUNA}}` — primeiro nome (`982 - PEDRO MEN` sai `Pedro`).
+- `{{CRESCIMENTO}}` (por linha), `{{TOTAL_FATURADO}}`, `{{TOTAL_META}}` e
+  `{{TOTAL_CRESCIMENTO}}` (do grupo) — calculados de `VLR_TOTAL`/`VLR_NOVO`
+  quando a planilha não tem essas colunas. Combine com `moeda:`.
+  Coluna própria da planilha sempre vence o cálculo.
 
 Na importação você mapeia a coluna do nome, a do e-mail e (opcional) a coluna
 de agrupamento. Agrupando por `CODVEND`, por exemplo, cada vendedor vira um
@@ -90,9 +98,15 @@ Exemplo de descrição para o top-5 por vendedor:
 ```text
 Olá, {{VENDEDOR}}! Segue o resumo dos seus 5 maiores clientes:
 {{#linhas}}
-{{POSICAO}} - {{RAZAOSOCIAL}} - R$ {{VLR_TOTAL}}
+{{POSICAO}} - {{RAZAOSOCIAL}} - {{moeda:VLR_TOTAL}}
 {{/linhas}}
 ```
+
+No formato HTML, se a descrição for um documento completo (contém `<html>`),
+ela vira o corpo inteiro do e-mail, sem a moldura padrão (título, saudação
+e botão). Use `cid:banner` / `cid:logo` no `src` das imagens para puxar a
+imagem e o logo cadastrados na campanha. O arquivo
+`email_gaya_cashback_dinamico.html` é um modelo pronto nesse formato.
 
 Use o botão **Prévia** ao lado de cada contato para conferir o e-mail
 renderizado antes de disparar.
@@ -114,7 +128,7 @@ O que acontece:
   e o vendedor encaminha cada um. Sem link próprio, `{{link}}` usa o do contato.
 - O convite do vendedor leva **um PDF por linha** (`formulario-1-nome.pdf`,
   `formulario-2-nome.pdf`…), com os dados só daquele cliente, para imprimir
-  e colher a assinatura física — e cada PDF traz o link digital dentro.
+  e colher a assinatura física. O PDF não traz link digital.
 - Quando o cliente assina pelo link, a cópia em PDF vai para a **empresa**,
   para o **cliente** e para o **vendedor** (e-mail cópia).
 - O botão **Clientes (x/y)** ao lado do contato abre o status por cliente
@@ -122,9 +136,39 @@ O que acontece:
 - A seção **Mensagem do cliente** (segundo menu dentro da campanha) guarda os
   textos do cliente, com as variáveis da linha (`{{COLUNA}}`, `{{NOME}}`,
   `{{EMAIL}}` e `{{link}}` para o próprio link): a mensagem do link de
-  assinatura e o texto que vai em cada PDF dele. Vazio, o PDF usa a mensagem
-  do cliente; ambas vazias, vale a descrição principal.
+  assinatura e, no layout livre, o texto do PDF. Variável sem dado na
+  planilha sai em branco.
 - Grupos sem e-mail cópia são pulados e listados como ignorados.
+- Com o **botão do vendedor desligado** (opção na criação/edição), o convite
+  do vendedor sai sem o botão de assinar e o link dele não aceita assinatura
+  — o botão aparece somente para o cliente.
+- O **formato** da campanha pode ser **só texto** ou **HTML**: em HTML a
+  descrição aceita tags (`<b>`, `<br>`, `<a href>`, tabelas…) e o e-mail sai
+  estilizado; os dados da planilha continuam escapados e no PDF as tags
+  viram texto simples.
+- A **assinatura** pode começar **preenchida com o nome** ou **vazia** (opção
+  na criação/edição); vazia, o cliente digita — o envio continua exigindo texto.
+
+## Layout do PDF (Termo de Adesão)
+
+Por padrão o PDF sai no layout de termo (5 seções numeradas, 1 página):
+dados do cliente, meta, benefícios, condições e assinatura. Os valores vêm
+da linha da planilha:
+
+- **CLIENTE** — nome do contato; **E-MAIL** — e-mail (ou "(não informado)").
+- **CNPJ** — colunas `CNPJ` ou `CNPJ_MATRIZ`.
+- **REPRESENTANTE** — `REPRESENTANTE`, `REPRESENTANTE_GAYA` ou `VENDEDOR`.
+- **FATURAMENTO** — `VLR_TOTAL`, `FATURAMENTO`, `VALOR_TOTAL` ou `VLR` (vira R$).
+- **META** — `META`, `VLR_META` ou `META_CLIENTE`; sem ela, calcula +10%
+  sobre o faturamento.
+- Textos de apoio (`MES_REF`, `MES_META`, `MES_APURACAO`, `PERIODO`,
+  `DATA_LIMITE`, `CASHBACK`, `PCT_META`) têm o padrão da campanha cashback e
+  podem ser sobrescritos por colunas com esses nomes.
+- A faixa do cabeçalho usa o campo **Destaque** (vazio, some).
+
+O campo **Layout do PDF** troca para **livre** (texto corrido da descrição,
+com imagem, logo e alinhamentos configuráveis). O termo usa posições fixas
+e ignora posição do logo e alinhamento do título.
 
 ## Imagem e logotipo da campanha
 
@@ -167,4 +211,6 @@ Para testes com banco separado, suba com `DB_PATH=caminho\teste.db`.
 As fontes Lato (texto), Alex Brush (assinatura) e Noto Emoji ficam em
 `public/fonts/`, vão embutidas no PDF e são distribuídas sob a licença SIL
 Open Font License. No PDF os emojis saem em preto e branco (limitação do
-formato); coloridos só na tela e no e-mail.
+formato); coloridos só na tela e no e-mail. O PDF sempre sai em uma única
+página: com texto longo a letra diminui e, em último caso, o texto é
+cortado com ….

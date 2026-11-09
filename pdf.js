@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { openSync } from 'fontkit';
 import { imageSize } from 'image-size';
+import { construirTermo } from './termo.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +33,17 @@ function carregarFontes() {
       script: openSync(arqs.script),
       emoji: openSync(arqs.emoji),
     };
-    return { arqs, fks };
+    const arqsOpt = {};
+    for (const [chave, arq, fk] of [['black', 'Lato-Black.ttf', 'preto'], ['italic', 'Lato-Italic.ttf', 'italico']]) {
+      try {
+        const p = path.join(FONT_DIR, arq);
+        if (fs.statSync(p).size >= 10000) {
+          arqsOpt[chave] = p;
+          fks[fk] = openSync(p);
+        }
+      } catch { /* fonte opcional */ }
+    }
+    return { arqs: { ...arqs, ...arqsOpt }, fks };
   } catch {
     return null;
   }
@@ -81,9 +92,16 @@ function imagemValida(dataUrl) {
   }
 }
 
-export function gerarPdf(campanha, contato, opts = {}) {
+// O PDF sai sempre em 1 página: tenta no tamanho normal, encolhe letra e
+// espaçamentos até o piso e, em último caso, corta a descrição com "…".
+export async function gerarPdf(campanha, contato, opts = {}) {
   const rascunho = !!opts.rascunho;
-  return new Promise((resolve, reject) => {
+  const filename = rascunho ? `formulario-${opts.numero || 1}-${slug(contato.nome)}.pdf` : `formulario-assinado-${slug(contato.nome)}.pdf`;
+  if ((campanha.layout_pdf || 'termo') !== 'livre') return construirTermo(campanha, contato, opts, filename, FONTES);
+  const descCheia = String(campanha.descricao || '').trim() || '(sem descrição)';
+  const construir = (escala, descSobrescrita) => new Promise((resolve, reject) => {
+    const fz = (v) => Math.max(6, v * escala);
+    const sp = (v) => v * escala;
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 48, bottom: 64, left: MARGEM, right: MARGEM },
@@ -128,7 +146,7 @@ export function gerarPdf(campanha, contato, opts = {}) {
     doc.on('error', reject);
     doc.on('end', () => resolve({
       buffer: Buffer.concat(chunks),
-      filename: rascunho ? `formulario-${opts.numero || 1}-${slug(contato.nome)}.pdf` : `formulario-assinado-${slug(contato.nome)}.pdf`,
+      filename,
       pages: totalPages,
     }));
 
@@ -174,63 +192,57 @@ export function gerarPdf(campanha, contato, opts = {}) {
     }
 
     // Descrição da campanha
-    doc.fillColor(TINTA).font(F.bold).fontSize(13);
+    doc.fillColor(TINTA).font(F.bold).fontSize(fz(13));
     escrever('bold', 'Descrição');
-    doc.moveDown(0.3);
-    doc.fillColor(TINTA).font(F.normal).fontSize(11);
-    const desc = String(campanha.descricao || '').trim() || '(sem descrição)';
+    doc.moveDown(sp(0.3));
+    doc.fillColor(TINTA).font(F.normal).fontSize(fz(11));
+    const desc = descSobrescrita !== undefined ? descSobrescrita : descCheia;
     garantir(Math.min(doc.heightOfString(desc, { width: larg }), 400) + 20);
     escrever('normal', desc, { width: larg, align: 'left' });
-    doc.moveDown(0.8);
+    doc.moveDown(sp(0.8));
 
     // Dados do cliente
-    garantir(130);
-    doc.fillColor(TINTA).font(F.bold).fontSize(13);
+    garantir(sp(130));
+    doc.fillColor(TINTA).font(F.bold).fontSize(fz(13));
     escrever('bold', 'Dados do cliente');
-    doc.moveDown(0.4);
+    doc.moveDown(sp(0.4));
     const linha = (rotulo, valor) => {
-      garantir(40);
+      garantir(sp(40));
       const y = doc.y;
-      doc.fillColor(CINZA).font(F.normal).fontSize(10);
+      doc.fillColor(CINZA).font(F.normal).fontSize(fz(10));
       escrever('normal', rotulo, MARGEM, y);
-      doc.fillColor(TINTA).font(F.bold).fontSize(12);
-      escrever('bold', String(valor), MARGEM, y + 14, { width: larg });
-      doc.moveDown(0.4);
+      doc.fillColor(TINTA).font(F.bold).fontSize(fz(12));
+      escrever('bold', String(valor), MARGEM, y + 14 * escala, { width: larg });
+      doc.moveDown(sp(0.4));
       doc.strokeColor(BORDA).lineWidth(0.7)
         .moveTo(MARGEM, doc.y).lineTo(MARGEM + larg, doc.y).stroke();
-      doc.moveDown(0.6);
+      doc.moveDown(sp(0.6));
     };
     linha('Nome do cliente', contato.nome);
     linha('E-mail', contato.email);
     if (!rascunho) linha('Assinado em', contato.assinado_em);
-    doc.moveDown(0.4);
+    doc.moveDown(sp(0.4));
 
     // Assinatura
-    garantir(150);
-    doc.fillColor(TINTA).font(F.bold).fontSize(13);
+    garantir(sp(150));
+    doc.fillColor(TINTA).font(F.bold).fontSize(fz(13));
     escrever('bold', 'Assinatura');
     if (rascunho) {
-      doc.moveDown(2.4);
+      doc.moveDown(sp(2.4));
       doc.strokeColor(COR_ESCURA).lineWidth(1)
         .moveTo(MARGEM, doc.y).lineTo(MARGEM + larg, doc.y).stroke();
-      doc.moveDown(0.5);
-      doc.fillColor(CINZA).font(F.normal).fontSize(9);
+      doc.moveDown(sp(0.5));
+      doc.fillColor(CINZA).font(F.normal).fontSize(fz(9));
       escrever('normal', 'Assine acima após imprimir.', { width: larg });
-      if (opts.link) {
-        doc.moveDown(0.4);
-        escrever('normal', 'Ou assine digitalmente neste link:', { width: larg });
-        doc.fillColor(TINTA).font(F.normal).fontSize(9);
-        escrever('normal', String(opts.link), { width: larg });
-      }
     } else {
-      doc.moveDown(0.3);
-      doc.fillColor(COR_ESCURA).font(F.script).fontSize(34);
+      doc.moveDown(sp(0.3));
+      doc.fillColor(COR_ESCURA).font(F.script).fontSize(Math.max(22, 34 * escala));
       escrever('script', String(contato.assinatura || contato.nome), { width: larg });
-      doc.moveDown(0.2);
+      doc.moveDown(sp(0.2));
       doc.strokeColor(COR_ESCURA).lineWidth(1)
         .moveTo(MARGEM, doc.y).lineTo(MARGEM + larg, doc.y).stroke();
-      doc.moveDown(0.6);
-      doc.fillColor(CINZA).font(F.normal).fontSize(9);
+      doc.moveDown(sp(0.6));
+      doc.fillColor(CINZA).font(F.normal).fontSize(fz(9));
       escrever('normal', 'Assinatura digitada pelo titular através do link individual enviado ao e-mail acima.', { width: larg });
     }
 
@@ -246,4 +258,22 @@ export function gerarPdf(campanha, contato, opts = {}) {
     }
     doc.end();
   });
+  let escala = 1;
+  let resultado = await construir(escala);
+  while (resultado.pages > 1 && escala > 0.62) {
+    escala = Math.max(0.62, +(escala - 0.08).toFixed(2));
+    resultado = await construir(escala);
+  }
+  if (resultado.pages > 1) {
+    let melhor = null;
+    let lo = 0.05;
+    let hi = 0.95;
+    for (let i = 0; i < 12; i++) {
+      const mid = (lo + hi) / 2;
+      const r = await construir(0.62, descCheia.slice(0, Math.max(1, Math.floor(descCheia.length * mid))).trimEnd() + '…');
+      if (r.pages <= 1) { melhor = r; lo = mid; } else { hi = mid; }
+    }
+    resultado = melhor || await construir(0.62, '…');
+  }
+  return resultado;
 }
